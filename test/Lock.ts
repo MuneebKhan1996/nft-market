@@ -48,6 +48,7 @@ describe('NFT market', () => {
 
       const args = receipt.events[1].args;
       expect(args.tokenId).to.equal(tokenId);
+      expect(args.from).to.equal(ethers.constants.AddressZero);
       expect(args.to).to.equal(ownerAddress);
       expect(args.tokenURI).to.equal(tokenURI);
       expect(args.price).to.equal(0);
@@ -86,6 +87,7 @@ describe('NFT market', () => {
       const args = receipt.events[1].args;
 
       expect(args.tokenId).to.equal(tokenId);
+      expect(args.from).to.equal(signers[0].address);
       expect(args.to).to.equal(nftMarket.address);
       expect(args.tokenURI).to.equal('');
       expect(args.price).to.equal(price);
@@ -146,9 +148,76 @@ describe('NFT market', () => {
       const args = receipt.events[1].args;
 
       expect(args.tokenId).to.equal(tokenId);
+      expect(args.from).to.equal(nftMarket.address);
       expect(args.to).to.equal(signers[1].address);
       expect(args.tokenURI).to.equal('');
       expect(args.price).to.equal(0);
+    });
+  });
+
+  describe('Cancel Listing', () => {
+    it('should revert if NFT is not for sale', async () => {
+      const transaction = nftMarket.cancelListing(9809809);
+      await expect(transaction).to.be.revertedWith('NFT not listed for sale');
+    });
+
+    it('should revert if the caller is not the seller of the listing', async () => {
+      const tokenId = await createAndListNFT(12312);
+      const transaction = nftMarket.connect(signers[1]).cancelListing(tokenId);
+      await expect(transaction).to.be.revertedWith(
+        'NFT: You are not the seller :/'
+      );
+    });
+
+    it('should transfer ownership back to the seller if all requirements are met', async () => {
+      const tokenId = await createAndListNFT(12312);
+      const transaction = await nftMarket.cancelListing(tokenId);
+      const receipt = await transaction.wait();
+
+      //check ownership
+      const ownerAddress = await nftMarket.ownerOf(tokenId);
+      expect(ownerAddress).to.equal(signers[0].address);
+
+      console.log('receipt.events :', receipt.events.length);
+      const args = receipt.events[1].args;
+      expect(args.tokenId).to.equal(tokenId);
+      expect(args.from).to.equal(nftMarket.address);
+      expect(args.to).to.equal(signers[0].address);
+      expect(args.tokenURI).to.equal('');
+      expect(args.price).to.equal(0);
+    });
+  });
+
+  describe('withdraw funds', () => {
+    it('should revert if called by a signer other than the owner', async () => {
+      const transaction = nftMarket.connect(signers[1]).withdrawFunds();
+      await expect(transaction).to.be.revertedWith(
+        'Ownable: caller is not the owner'
+      );
+    });
+
+    it('should bla bla', async () => {
+      const contractBalance = await nftMarket.provider.getBalance(
+        nftMarket.address
+      );
+
+      const initialOwnerBalance = await signers[0].getBalance();
+      const transaction = await nftMarket.withdrawFunds();
+      const receipt = await transaction.wait();
+
+      await new Promise((r) => setTimeout(r, 100));
+      const newOwnerBalance = await signers[0].getBalance();
+
+      const gas = receipt.gasUsed.mul(receipt.effectiveGasPrice);
+      const transferred = newOwnerBalance.add(gas).sub(initialOwnerBalance);
+
+      expect(transferred).to.equal(contractBalance);
+      console.log('contractBalance :', contractBalance);
+    });
+
+    it('should revert if contract balance is zero', async () => {
+      const transaction = nftMarket.withdrawFunds();
+      await expect(transaction).to.be.revertedWith('NFT balance is zero');
     });
   });
 });

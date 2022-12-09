@@ -22,6 +22,7 @@ contract NFTMarket is ERC721URIStorage, Ownable {
     //if price is 0 && tokenURI is an empty string then an NFT was transferred (either bought or the listing was cancelled)
     event NFTTransfer(
         uint256 tokenId,
+        address from,
         address to,
         string tokenURI,
         uint256 price
@@ -36,7 +37,7 @@ contract NFTMarket is ERC721URIStorage, Ownable {
         _safeMint(msg.sender, currentTokenId);
         _setTokenURI(currentTokenId, tokenURI);
 
-        emit NFTTransfer(currentTokenId, msg.sender, tokenURI, 0);
+        emit NFTTransfer(currentTokenId, address(0), msg.sender, tokenURI, 0);
 
         return currentTokenId;
     }
@@ -47,7 +48,7 @@ contract NFTMarket is ERC721URIStorage, Ownable {
         transferFrom(msg.sender, address(this), tokenId);
         _listings[tokenId] = NFTListing(price, msg.sender);
 
-        emit NFTTransfer(tokenId, address(this), "", price);
+        emit NFTTransfer(tokenId, msg.sender, address(this), "", price);
     }
 
     //BuyNFT
@@ -60,23 +61,23 @@ contract NFTMarket is ERC721URIStorage, Ownable {
         clearListing(tokenId);
         payable(listing.seller).transfer(listing.price.mul(95).div(100));
 
-        emit NFTTransfer(tokenId, msg.sender, "", 0);
+        emit NFTTransfer(tokenId, address(this), msg.sender, "", 0);
     }
 
     //CancelNFT
     function cancelListing(uint256 tokenId) public {
         NFTListing memory listing = _listings[tokenId];
         require(listing.price > 0, "NFT not listed for sale");
-        require(listing.seller == msg.sender, "NFT: You are not the owner :/");
+        require(listing.seller == msg.sender, "NFT: You are not the seller :/");
 
-        transferFrom(address(this), msg.sender, tokenId);
+        ERC721(address(this)).transferFrom(address(this), msg.sender, tokenId);
 
         clearListing(tokenId);
 
-        emit NFTTransfer(tokenId, msg.sender, "", 0);
+        emit NFTTransfer(tokenId, address(this), msg.sender, "", 0);
     }
 
-    function withdrawFunds(address) public onlyOwner {
+    function withdrawFunds() public onlyOwner {
         uint256 balance = address(this).balance;
         require(balance > 0, "NFT balance is zero");
         payable(owner()).transfer(balance);
